@@ -2,7 +2,7 @@
 ** -----------------------------------------------------------------------------**
 ** pnghist.c
 **
-** Copyright (C) 2006-2008 Elphel, Inc.
+** Copyright (C) 2006-2016 Elphel, Inc.
 **
 ** -----------------------------------------------------------------------------**
 **  This program is free software: you can redistribute it and/or modify
@@ -19,6 +19,9 @@
 **  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ** -----------------------------------------------------------------------------**
 */
+
+#include <string.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -29,14 +32,20 @@
 #include <fcntl.h>
 #include <math.h>
 
-#include <asm/elphel/autoexp.h>
+//#include <elphel/autoexp.h>
+// http://stackoverflow.com/questions/2442335/libpng-boostgil-png-infopp-null-not-found
+// libpng 1.4 dropped definitions of png_infopp_NULL and int_p_NULL. So add
+#define png_infopp_NULL (png_infopp)NULL
+#define int_p_NULL (int*)NULL
 
 #include <sys/mman.h>
-#include <asm/elphel/c313a.h>
+#include <elphel/c313a.h>
+#include <elphel/x393_devices.h>
 
  
 //#include "zlib.h"
-#include "libpng/png.h"
+//#include <libpng16/png.h>
+#include <png.h>
 #define HIST_SIZE 256 * 4 * 4
 
 #define HPNG_PLOT_BARS    1
@@ -47,7 +56,11 @@
 
 #define QRY_MAXPARAMS 64
 
-//#define THIS_DEBUG 1
+#define THIS_DEBUG 0
+// lighttpd requires the following setting to enable logging of the cgi program errors:
+// ## where cgi stderr output is redirected
+// server.breakagelog          = "/www/logs/lighttpd_stderr.log"
+
 
 char  copyQuery [4096];
 const char *uri;
@@ -71,9 +84,13 @@ struct autoexp_t autoexp;
 int write_png(int height, int data[1024], int mode, int colors);
 int main(int argc, char *argv[])
 {
+  int sensor_port=0;
+  int subchannel = 0;
   int fd_histogram_cache;
   struct histogram_stuct_t  * histogram_cache; /// array of histogram
-  const char histogram_driver_name[]="/dev/histogram_cache";
+  const char histogram_driver_name[]=DEV393_PATH(DEV393_HISTOGRAM);
+//#define DEV393_HISTOGRAM      ("histogram_cache","histograms_operations",138,18,"0666","c") ///< Access to acquired/calculated histograms for all ports/channels/colors
+
   int hists[1536];
   int rava[256];
   int i,j,k,a,l;
@@ -129,15 +146,18 @@ int main(int argc, char *argv[])
 /// Sample from camvc.html
 ///http://192.168.0.9/pnghist.cgi?sqrt=1&scale=5&average=5&height=128&fillz=1&linterpz=0&draw=2&colors=41
 ///FIXME: Some bump on low red - what is it?
-  if((v = paramValue(gparams, "height"))   != NULL) png_height=strtol(v, NULL, 10);
-  if((v = paramValue(gparams, "draw"))     != NULL) mode= (mode & 0xfc) | (strtol(v, NULL, 10) & 3);
-  if((v = paramValue(gparams, "fillz"))    != NULL) mode= (mode & (~HPNG_FILL_ZEROS)) | (strtol(v, NULL, 10)?HPNG_FILL_ZEROS:0);
-  if((v = paramValue(gparams, "linterpz")) != NULL) mode= (mode & (~HPNG_LIN_INTERP)) | (strtol(v, NULL, 10)?HPNG_LIN_INTERP:0);
-  if((v = paramValue(gparams, "sqrt"))     != NULL) mode= (mode & (~HPNG_RUN_SQRT))   | (strtol(v, NULL, 10)?HPNG_RUN_SQRT:0);
-  if((v = paramValue(gparams, "colors"))   != NULL) colors=strtol(v, NULL, 10);
-  if((v = paramValue(gparams, "average"))  != NULL) rav=strtol(v, NULL, 10);
-  if((v = paramValue(gparams, "scale"))    != NULL) dscale=strtod(v,NULL);
-  if((v = paramValue(gparams, "disrq"))    != NULL) request_enable=strtol(v, NULL, 10)?0:1;
+//sensor_port
+  if((v = paramValue(gparams, "sensor_port")) != NULL) sensor_port=strtol(v, NULL, 10);
+  if((v = paramValue(gparams, "subchannel")) != NULL)  subchannel=strtol(v, NULL, 10);
+  if((v = paramValue(gparams, "height"))      != NULL) png_height=strtol(v, NULL, 10);
+  if((v = paramValue(gparams, "draw"))        != NULL) mode= (mode & 0xfc) | (strtol(v, NULL, 10) & 3);
+  if((v = paramValue(gparams, "fillz"))       != NULL) mode= (mode & (~HPNG_FILL_ZEROS)) | (strtol(v, NULL, 10)?HPNG_FILL_ZEROS:0);
+  if((v = paramValue(gparams, "linterpz"))    != NULL) mode= (mode & (~HPNG_LIN_INTERP)) | (strtol(v, NULL, 10)?HPNG_LIN_INTERP:0);
+  if((v = paramValue(gparams, "sqrt"))        != NULL) mode= (mode & (~HPNG_RUN_SQRT))   | (strtol(v, NULL, 10)?HPNG_RUN_SQRT:0);
+  if((v = paramValue(gparams, "colors"))      != NULL) colors=strtol(v, NULL, 10);
+  if((v = paramValue(gparams, "average"))     != NULL) rav=strtol(v, NULL, 10);
+  if((v = paramValue(gparams, "scale"))       != NULL) dscale=strtod(v,NULL);
+  if((v = paramValue(gparams, "disrq"))       != NULL) request_enable=strtol(v, NULL, 10)?0:1;
 //  int request_enable=1; /// enable requesting histogram calculation for the specified frame (0 - use/wait what available)
 
 //  const char histogram_driver_name[]="/dev/histogram_cache"
@@ -150,7 +170,7 @@ int main(int argc, char *argv[])
      fflush(stdout);
      return -1;
   }
-//! now try to mmap
+// now try to mmap
   histogram_cache = (struct histogram_stuct_t *) mmap(0, sizeof (struct histogram_stuct_t) * HISTOGRAM_CACHE_NUMBER , PROT_READ, MAP_SHARED, fd_histogram_cache, 0);
   if((int)histogram_cache == -1) {
      fprintf(stdout, "Pragma: no-cache\n");
@@ -159,7 +179,35 @@ int main(int argc, char *argv[])
      fflush(stdout);
      return -1;
   }
+//  Select sensor port and subchannel
+  if ((sensor_port< 0) || (sensor_port > 3) || (subchannel < 0) || (subchannel > 3)){
+     fprintf(stdout, "Pragma: no-cache\n");
+     fprintf(stdout, "Content-Type: text/plain\n\n");
+     fprintf(stdout, "Wrong sensor port and/or subchannel number: %s\n", histogram_driver_name);
+     fflush(stdout);
+     return -1;
+  }
+  if (((i = lseek(fd_histogram_cache, LSEEK_HIST_SET_CHN + (sensor_port <<2) +subchannel, SEEK_END)))<0){ // set port/subchannel to use
+      fprintf(stdout, "Pragma: no-cache\n");
+      fprintf(stdout, "Content-Type: text/plain\n\n");
+      fprintf(stdout, "port/subchannel combination does not exist: %s\n", histogram_driver_name);
+      fflush(stdout);
+      return -1;
+  }
 
+#if 0
+  if ((offset & ~0xf) == LSEEK_HIST_SET_CHN){
+      p = (offset >> 2)  & 3;
+      s = (offset >> 0)  & 3;
+      if (get_hist_index(p,s)<0)
+          return -ENXIO; // invalid port/channel combination
+      privData->port =       p;
+      privData->subchannel = s;
+      if((v = paramValue(gparams, "sensor_port")) != NULL) sensor_port=strtol(v, NULL, 10);
+      if((v = paramValue(gparams, "subchannel")) != NULL)  subchannel=strtol(v, NULL, 10);
+
+
+#endif
 /// Now find the index of the most recently available histogram (maybe will wait a little if it is not yet available for the current frame - use previous?)
   lseek(fd_histogram_cache, LSEEK_HIST_WAIT_C, SEEK_END);          /// wait for all histograms, not just Y (G1)
   lseek(fd_histogram_cache, LSEEK_HIST_NEEDED + 0xf0, SEEK_END);    /// forward and cumulative histograms are needed
@@ -188,6 +236,7 @@ int main(int argc, char *argv[])
      fprintf (stderr," %05x",hists[i]);
    }
    fprintf (stderr,"\n\n\n");
+   fflush(stderr);
 #endif
 
   if ((mode & (HPNG_FILL_ZEROS | HPNG_LIN_INTERP)) | (rav>1)) { // spread between zeros - needed at high digital gains (near black with low gammas)
@@ -258,7 +307,6 @@ int main(int argc, char *argv[])
 #define OK 0
 //#define HPNG_PLOT_BARS    1
 //#define HPNG_CONNECT_DOTS 2
-
 
 int write_png(int png_height, int data[1536], int mode, int colors)
 {
@@ -406,7 +454,7 @@ int write_png(int png_height, int data[1536], int mode, int colors)
    png_set_PLTE(png_ptr,
                 info_ptr,
                 palette,
-                PNG_MAX_PALETTE_LENGTH);
+                sizeof(cpalette)/3); // PNG_MAX_PALETTE_LENGTH);
     png_set_tRNS(png_ptr,
                 info_ptr,
                 trans,
@@ -524,10 +572,10 @@ int write_png(int png_height, int data[1536], int mode, int colors)
 //   png_uint_32 k, height, width;
 //   png_byte image[height][width*bytes_per_pixel];
 //   png_bytep row_pointers[height];
-
+#if 0
    if (height > PNG_UINT_32_MAX/png_sizeof(png_bytep))
      png_error (png_ptr, "Image is too tall to process in memory");
-
+#endif
    for (k = 0; k < height; k++)
      row_pointers[k] = (png_bytep) image + k*width*bytes_per_pixel;
 
