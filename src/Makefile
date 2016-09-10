@@ -9,7 +9,7 @@ CFLAGS   += -Wall -I$(STAGING_DIR_HOST)/usr/include-uapi
 #LDLIBS   += -lpng -lm -lz
 LDLIBS   += -lpng -lm
 
-INSTALL    = install
+#INSTALL    = install
 INSTMODE   = 0755
 INSTDOCS   = 0644
 OWN = -o root -g root
