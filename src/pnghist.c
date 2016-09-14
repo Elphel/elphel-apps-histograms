@@ -56,7 +56,7 @@
 
 #define QRY_MAXPARAMS 64
 
-#define THIS_DEBUG 0
+#define THIS_DEBUG 1
 // lighttpd requires the following setting to enable logging of the cgi program errors:
 // ## where cgi stderr output is redirected
 // server.breakagelog          = "/www/logs/lighttpd_stderr.log"
@@ -104,6 +104,7 @@ int main(int argc, char *argv[])
   int coeff;
   int lastmiddle_i,newmiddle_i;
   int hist_index;
+  int before = 1; // by default - previous frame
   const char colors_calc[]={  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,0xa,0xb,0xc,0xd,0xe,0xf,
                       0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,
                         6,  7,  6,  7,  6,  7,  6,  7,0xe,0xf,0xe,0xf,0xe,0xf,0xe,0xf,
@@ -158,6 +159,8 @@ int main(int argc, char *argv[])
   if((v = paramValue(gparams, "average"))     != NULL) rav=strtol(v, NULL, 10);
   if((v = paramValue(gparams, "scale"))       != NULL) dscale=strtod(v,NULL);
   if((v = paramValue(gparams, "disrq"))       != NULL) request_enable=strtol(v, NULL, 10)?0:1;
+  if((v = paramValue(gparams, "before"))      != NULL) before=strtol(v, NULL, 10);
+//  before
 //  int request_enable=1; /// enable requesting histogram calculation for the specified frame (0 - use/wait what available)
 
 //  const char histogram_driver_name[]="/dev/histogram_cache"
@@ -213,7 +216,7 @@ int main(int argc, char *argv[])
   lseek(fd_histogram_cache, LSEEK_HIST_NEEDED + 0xf0, SEEK_END);    /// forward and cumulative histograms are needed
   if (request_enable) lseek(fd_histogram_cache, LSEEK_HIST_REQ_EN, SEEK_END);
   else                lseek(fd_histogram_cache, LSEEK_HIST_REQ_DIS, SEEK_END); /// disable requesting histogram for the specified frame, rely on the available ones
-  hist_index=lseek(fd_histogram_cache, -1, SEEK_CUR);                /// request histograms for the previous frame
+  hist_index=lseek(fd_histogram_cache, -before, SEEK_CUR);                /// request histograms for the previous frame
   if(hist_index <0) {
      fprintf(stdout, "Pragma: no-cache\n");
      fprintf(stdout, "Content-Type: text/plain\n\n");
