@@ -86,6 +86,7 @@ int main(int argc, char *argv[])
 {
   int sensor_port=0;
   int subchannel = 0;
+  int total_hist_entries; // =8*4 for 4 sensors
   int fd_histogram_cache;
   struct histogram_stuct_t  * histogram_cache; /// array of histogram
   const char histogram_driver_name[]=DEV393_PATH(DEV393_HISTOGRAM);
@@ -173,15 +174,6 @@ int main(int argc, char *argv[])
      fflush(stdout);
      return -1;
   }
-// now try to mmap
-  histogram_cache = (struct histogram_stuct_t *) mmap(0, sizeof (struct histogram_stuct_t) * HISTOGRAM_CACHE_NUMBER , PROT_READ, MAP_SHARED, fd_histogram_cache, 0);
-  if((int)histogram_cache == -1) {
-     fprintf(stdout, "Pragma: no-cache\n");
-     fprintf(stdout, "Content-Type: text/plain\n\n");
-     fprintf(stdout, "problems with mmap: %s\n", histogram_driver_name);
-     fflush(stdout);
-     return -1;
-  }
 //  Select sensor port and subchannel
   if ((sensor_port< 0) || (sensor_port > 3) || (subchannel < 0) || (subchannel > 3)){
      fprintf(stdout, "Pragma: no-cache\n");
@@ -190,13 +182,26 @@ int main(int argc, char *argv[])
      fflush(stdout);
      return -1;
   }
-  if (((i = lseek(fd_histogram_cache, LSEEK_HIST_SET_CHN + (sensor_port <<2) +subchannel, SEEK_END)))<0){ // set port/subchannel to use
+  if (((total_hist_entries = lseek(fd_histogram_cache, LSEEK_HIST_SET_CHN + (sensor_port <<2) +subchannel, SEEK_END)))<0){ // set port/subchannel to use
       fprintf(stdout, "Pragma: no-cache\n");
       fprintf(stdout, "Content-Type: text/plain\n\n");
       fprintf(stdout, "port/subchannel combination does not exist: %s\n", histogram_driver_name);
       fflush(stdout);
       return -1;
   }
+#ifdef THIS_DEBUG
+   fprintf (stderr,"LSEEK_HIST_SET_CHN port = %d chn = %d - > 0x%x\n",sensor_port,subchannel, total_hist_entries);
+   fflush(stderr);
+#endif
+   // now try to mmap
+     histogram_cache = (struct histogram_stuct_t *) mmap(0, sizeof (struct histogram_stuct_t) * total_hist_entries , PROT_READ, MAP_SHARED, fd_histogram_cache, 0);
+     if((int)histogram_cache == -1) {
+        fprintf(stdout, "Pragma: no-cache\n");
+        fprintf(stdout, "Content-Type: text/plain\n\n");
+        fprintf(stdout, "problems with mmap: %s\n", histogram_driver_name);
+        fflush(stdout);
+        return -1;
+     }
 
 #if 0
   if ((offset & ~0xf) == LSEEK_HIST_SET_CHN){
@@ -216,7 +221,7 @@ int main(int argc, char *argv[])
   lseek(fd_histogram_cache, LSEEK_HIST_NEEDED + 0xf0, SEEK_END);    /// forward and cumulative histograms are needed
   if (request_enable) lseek(fd_histogram_cache, LSEEK_HIST_REQ_EN, SEEK_END);
   else                lseek(fd_histogram_cache, LSEEK_HIST_REQ_DIS, SEEK_END); /// disable requesting histogram for the specified frame, rely on the available ones
-  hist_index=lseek(fd_histogram_cache, -before, SEEK_CUR);                /// request histograms for the previous frame
+  hist_index=lseek(fd_histogram_cache, -before, SEEK_CUR);                     /// request histograms for the previous frame
   if(hist_index <0) {
      fprintf(stdout, "Pragma: no-cache\n");
      fprintf(stdout, "Content-Type: text/plain\n\n");
@@ -224,6 +229,12 @@ int main(int argc, char *argv[])
      fflush(stdout);
      return -1;
   }
+
+#ifdef THIS_DEBUG
+   fprintf (stderr,"hist_index =  0x%x\n",hist_index);
+   fflush(stderr);
+#endif
+
   /// Ignore missing histograms here
 //  ww=(ww*autoexp.width)/100;
 //  wh=(wh*autoexp.height)/100;
@@ -298,7 +309,7 @@ int main(int argc, char *argv[])
    for (i=0;i<1024;i++) {
      if ((i & 0x0ff)==0) fprintf (stderr,"\n");
      if ((i &  0x0f)==0) fprintf (stderr,"\n0x%03x:",i);
-     fprintf (stderr," %04x",hists[i]);
+     fprintf (stderr," %05x",hists[i]);
    }
    fprintf (stderr,"\n\n\n");
 #endif

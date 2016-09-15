@@ -31,5 +31,10 @@ install: $(PROGS) $(PHPSCRIPTS) $(CONFIGS)
 
 clean:
 	rm -rf $(PROGS) *.o *~
-#TODO: implement automatic dependencies!
-#camogm.c:$(STAGING_DIR_HOST)/usr/include-uapi/elphel/x393_devices.h
+depend: .depend
+
+.depend: $(SRCS)
+	rm -f ./.depend
+	$(CC) $(CFLAGS) -MM $^ > ./.depend;
+
+include .depend

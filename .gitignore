@@ -12,3 +12,4 @@ bitbake-logs
 /temp/
 *.o
 *.cgi
+.depend
