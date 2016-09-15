@@ -56,7 +56,7 @@
 
 #define QRY_MAXPARAMS 64
 
-#define THIS_DEBUG 0
+//#define THIS_DEBUG
 // lighttpd requires the following setting to enable logging of the cgi program errors:
 // ## where cgi stderr output is redirected
 // server.breakagelog          = "/www/logs/lighttpd_stderr.log"
