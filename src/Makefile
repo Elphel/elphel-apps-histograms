@@ -30,7 +30,7 @@ install: $(PROGS) $(PHPSCRIPTS) $(CONFIGS)
 	$(INSTALL) $(OWN) -m $(INSTMODE) $(PROGS) $(DESTDIR)$(CGIDIR)
 
 clean:
-	rm -rf $(PROGS) *.o *~
+	rm -rf $(PROGS) *.o *~ .depend
 depend: .depend
 
 .depend: $(SRCS)
