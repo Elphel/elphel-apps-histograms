@@ -13,4 +13,8 @@ bitbake-logs
 *.o
 *.cgi
 .depend
+
+doxygen.tag
 /image
+/scripts
+/html

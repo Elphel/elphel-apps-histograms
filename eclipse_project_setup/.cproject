@@ -18,7 +18,7 @@
 					<folderInfo id="0.1911075509." name="/" resourcePath="">
 						<toolChain id="org.eclipse.cdt.build.core.prefbase.toolchain.666232262" name="No ToolChain" resourceTypeBasedDiscovery="false" superClass="org.eclipse.cdt.build.core.prefbase.toolchain">
 							<targetPlatform id="org.eclipse.cdt.build.core.prefbase.toolchain.666232262.1732628229" name=""/>
-							<builder arguments="apps-histograms" command="${workspace_loc:/elphel-apps-imgsrv/run_bitbake.sh}" enableCleanBuild="false" id="org.eclipse.cdt.build.core.settings.default.builder.552011105" incrementalBuildTarget="-c compile -f -v" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="org.eclipse.cdt.build.core.settings.default.builder"/>
+							<builder arguments="apps-histograms" command="${workspace_loc:/elphel-apps-imgsrv/scripts/run_bitbake.sh}" enableCleanBuild="false" id="org.eclipse.cdt.build.core.settings.default.builder.552011105" incrementalBuildTarget="-c compile -f -v" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="org.eclipse.cdt.build.core.settings.default.builder"/>
 							<tool id="org.eclipse.cdt.build.core.settings.holder.libs.838083408" name="holder for library settings" superClass="org.eclipse.cdt.build.core.settings.holder.libs"/>
 							<tool id="org.eclipse.cdt.build.core.settings.holder.383560979" name="Assembly" superClass="org.eclipse.cdt.build.core.settings.holder">
 								<option id="org.eclipse.cdt.build.core.settings.holder.incpaths.1127280104" name="Include Paths" superClass="org.eclipse.cdt.build.core.settings.holder.incpaths" valueType="includePath">
