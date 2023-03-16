@@ -56,7 +56,7 @@
 
 #define QRY_MAXPARAMS 64
 
-//#define THIS_DEBUG
+#define THIS_DEBUG
 // lighttpd requires the following setting to enable logging of the cgi program errors:
 // ## where cgi stderr output is redirected
 // server.breakagelog          = "/www/logs/lighttpd_stderr.log"
@@ -106,6 +106,8 @@ int main(int argc, char *argv[])
   int lastmiddle_i,newmiddle_i;
   int hist_index;
   int before = 1; // by default - previous frame
+  // bitmap: +1 - low bandwidth output, +2 - raw histograms used for PNG, +4 - processed histograms, +8 - all FPGA histograms
+  int debug_level = 0;
   const char colors_calc[]={  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,0xa,0xb,0xc,0xd,0xe,0xf,
                       0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,0xf,
                         6,  7,  6,  7,  6,  7,  6,  7,0xe,0xf,0xe,0xf,0xe,0xf,0xe,0xf,
@@ -161,6 +163,9 @@ int main(int argc, char *argv[])
   if((v = paramValue(gparams, "scale"))       != NULL) dscale=strtod(v,NULL);
   if((v = paramValue(gparams, "disrq"))       != NULL) request_enable=strtol(v, NULL, 10)?0:1;
   if((v = paramValue(gparams, "before"))      != NULL) before=strtol(v, NULL, 10);
+  //   int debug_fpga = 0;
+  if((v = paramValue(gparams, "debug"))      != NULL)  debug_level=strtol(v, NULL, 10);
+
 //  before
 //  int request_enable=1; /// enable requesting histogram calculation for the specified frame (0 - use/wait what available)
 
@@ -189,19 +194,19 @@ int main(int argc, char *argv[])
       fflush(stdout);
       return -1;
   }
-#ifdef THIS_DEBUG
+  if (debug_level &1) {
    fprintf (stderr,"LSEEK_HIST_SET_CHN port = %d chn = %d - > 0x%x\n",sensor_port,subchannel, total_hist_entries);
    fflush(stderr);
-#endif
-   // now try to mmap
-     histogram_cache = (struct histogram_stuct_t *) mmap(0, sizeof (struct histogram_stuct_t) * total_hist_entries , PROT_READ, MAP_SHARED, fd_histogram_cache, 0);
-     if((int)histogram_cache == -1) {
-        fprintf(stdout, "Pragma: no-cache\n");
-        fprintf(stdout, "Content-Type: text/plain\n\n");
-        fprintf(stdout, "problems with mmap: %s\n", histogram_driver_name);
-        fflush(stdout);
-        return -1;
-     }
+  }
+  // now try to mmap
+  histogram_cache = (struct histogram_stuct_t *) mmap(0, sizeof (struct histogram_stuct_t) * total_hist_entries , PROT_READ, MAP_SHARED, fd_histogram_cache, 0);
+  if((int)histogram_cache == -1) {
+	  fprintf(stdout, "Pragma: no-cache\n");
+	  fprintf(stdout, "Content-Type: text/plain\n\n");
+	  fprintf(stdout, "problems with mmap: %s\n", histogram_driver_name);
+	  fflush(stdout);
+	  return -1;
+  }
 
 #if 0
   if ((offset & ~0xf) == LSEEK_HIST_SET_CHN){
@@ -230,10 +235,51 @@ int main(int argc, char *argv[])
      return -1;
   }
 
-#ifdef THIS_DEBUG
-   fprintf (stderr,"hist_index =  0x%x\n",hist_index);
-   fflush(stderr);
-#endif
+  if (debug_level &1) {
+	  fprintf (stderr,"hist_index =  0x%x\n",hist_index);
+	  fflush(stderr);
+  }
+  if (debug_level & 8) { // with SEEK_END twice (for first 8 and last 8) copy FPGA data and print for the selected sensor port/channel
+// disable histograms DMA
+//	  lseek(fd_histogram_cache, LSEEK_HIST_DIS, SEEK_END);
+	  for (k = 0; k < (PARS_FRAMES/HISTOGRAM_CACHE_NUMBER); k++){
+//	  for (k = 0; k < 1; k++){
+		  j = -32 + (k << 4) + (sensor_port << 2) +  subchannel;
+		  // copying half (16/2 = 8) frames from DMA memory to histogram cache
+		  lseek(fd_histogram_cache, j, SEEK_END);          /// wait for all histograms, not just Y (G1)
+		  fprintf (stderr,"\nlseek request =  0x%x\n",j);
+		  for (j = 0; j < HISTOGRAM_CACHE_NUMBER; j++){
+			  fprintf (stderr,"\n\nhist_index= %d (%d)",j,k);// , FIRST PASS\n",j,k);
+			  memcpy (hists, histogram_cache[j].hist, HIST_SIZE);
+			  for (i=0;i<1024;i++) {
+				  if ((i & 0x0ff)==0) fprintf (stderr,"\n");
+				  if ((i &  0x0f)==0) fprintf (stderr,"\n0x%05x:",i+1024*j + 8192*k);
+				  fprintf (stderr," %08x",hists[i]);
+			  }
+		  }
+	  }
+/*
+	  for (k = 0; k < (PARS_FRAMES/HISTOGRAM_CACHE_NUMBER); k++){
+		  j = -32 + (k << 4) + (sensor_port << 2) +  subchannel;
+		  // copying half (16/2 = 8) frames from DMA memory to histogram cache
+		  lseek(fd_histogram_cache, j, SEEK_END);          /// wait for all histograms, not just Y (G1)
+		  for (j = 0; j < HISTOGRAM_CACHE_NUMBER; j++){
+			  fprintf (stderr,"\nhist_index= %d (%d), SECOND PASS\n",j,k);
+			  memcpy (hists, histogram_cache[j].hist, HIST_SIZE);
+			  for (i=0;i<1024;i++) {
+				  if ((i & 0x0ff)==0) fprintf (stderr,"\n");
+				  if ((i &  0x0f)==0) fprintf (stderr,"\n0x%05x:",i+1024*j + 8192*k);
+				  fprintf (stderr," %08x",hists[i]);
+			  }
+		  }
+	  }
+*/
+
+	  // re-enable histograms DMA
+//	  lseek(fd_histogram_cache, LSEEK_HIST_EN, SEEK_END);          /// wait for all histograms, not just Y (G1)
+	  fprintf (stderr,"\n\n\n");
+	  fflush(stderr);
+  }
 
   /// Ignore missing histograms here
 //  ww=(ww*autoexp.width)/100;
@@ -243,7 +289,7 @@ int main(int argc, char *argv[])
   memcpy (hists,histogram_cache[hist_index].hist,HIST_SIZE);
   close (fd_histogram_cache);
   coeff=dcoeff*65536;
-#ifdef THIS_DEBUG
+  if (debug_level & 2) {
    for (i=0;i<1024;i++) {
      if ((i & 0x0ff)==0) fprintf (stderr,"\n");
      if ((i &  0x0f)==0) fprintf (stderr,"\n0x%03x:",i);
@@ -251,8 +297,7 @@ int main(int argc, char *argv[])
    }
    fprintf (stderr,"\n\n\n");
    fflush(stderr);
-#endif
-
+  }
   if ((mode & (HPNG_FILL_ZEROS | HPNG_LIN_INTERP)) | (rav>1)) { // spread between zeros - needed at high digital gains (near black with low gammas)
     for (j=0;j<4;j++)  if (colors_calc[colors] & (1<<j)) {
       lastmiddle_i=255;
@@ -302,19 +347,19 @@ int main(int argc, char *argv[])
    hists[i+(j<<8)]=(hists[i+(j<<8)]*coeff) >> 16;
    if (hists[i+(j<<8)] > (png_height-1)) hists[i+(j<<8)] = png_height-1;
   }
-   fprintf(stdout, "Pragma: no-cache\n");
-   fprintf(stdout, "Content-Type: image/png\n\n");
-#ifdef THIS_DEBUG
-//   for (i=0;i<1536;i++) {
-   for (i=0;i<1024;i++) {
-     if ((i & 0x0ff)==0) fprintf (stderr,"\n");
-     if ((i &  0x0f)==0) fprintf (stderr,"\n0x%03x:",i);
-     fprintf (stderr," %05x",hists[i]);
-   }
-   fprintf (stderr,"\n\n\n");
-#endif
-   write_png(png_height, hists, mode, colors);
-   fflush(stdout);
+  fprintf(stdout, "Pragma: no-cache\n");
+  fprintf(stdout, "Content-Type: image/png\n\n");
+  if (debug_level & 4) {
+	  //   for (i=0;i<1536;i++) {
+	  for (i=0;i<1024;i++) {
+		  if ((i & 0x0ff)==0) fprintf (stderr,"\n");
+		  if ((i &  0x0f)==0) fprintf (stderr,"\n0x%03x:",i);
+		  fprintf (stderr," %05x",hists[i]);
+	  }
+	  fprintf (stderr,"\n\n\n");
+  }
+  write_png(png_height, hists, mode, colors);
+  fflush(stdout);
   return 0;
 }
 #define ERROR -1
